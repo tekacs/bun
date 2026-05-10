@@ -18,7 +18,7 @@ pub struct SquareT {
 }
 
 link_impl_Shape! {
-    Circle for CircleT => |this| {
+    Circle for registered CircleT => |this| {
         area()    => core::f64::consts::PI * (*this).r * (*this).r,
         scale(k)  => (*this).r *= k,
         name()    => "circle",
@@ -39,8 +39,9 @@ link_impl_Shape! {
 fn dispatch_round_trip() {
     let mut c = CircleT { r: 2.0 };
     let mut s = SquareT { s: 3.0 };
-    // SAFETY: c/s are live for the duration of every dispatch below.
-    let hc = unsafe { Shape::new(ShapeKind::Circle, &raw mut c) };
+    // SAFETY: c/s are live for the duration of every dispatch below. Circle
+    // opts into the registered arm, so its tag is derived from the owner type.
+    let hc = unsafe { Shape::from_raw(&raw mut c) };
     let hs = unsafe { Shape::new(ShapeKind::Square, &raw mut s) };
 
     assert!((hc.area() - core::f64::consts::PI * 4.0).abs() < 1e-9);

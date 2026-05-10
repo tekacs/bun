@@ -168,9 +168,8 @@ impl<'a> ProcessHandle<'a> {
         // SAFETY: `handle` is the live `ProcessHandle` slot in `State.handles`;
         // it owns `process` and outlives it.
         process.set_exit_handler(unsafe {
-            bun_spawn::ProcessExit::new(
-                bun_spawn::ProcessExitKind::FilterRunHandle,
-                std::ptr::from_mut::<ProcessHandle<'a>>(handle),
+            bun_spawn::ProcessExit::from_raw::<ProcessHandle<'static>>(
+                std::ptr::from_mut::<ProcessHandle<'a>>(handle).cast(),
             )
         });
 
@@ -205,7 +204,7 @@ impl<'a> ProcessHandle<'a> {
 }
 
 bun_spawn::link_impl_ProcessExit! {
-    FilterRunHandle for ProcessHandle<'static> => |this| {
+    FilterRunHandle for registered ProcessHandle<'static> => |this| {
         on_process_exit(process, status, rusage) =>
             (*this).on_process_exit(&mut *process, status, &*rusage),
     }

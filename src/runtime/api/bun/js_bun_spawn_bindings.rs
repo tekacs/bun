@@ -1337,9 +1337,8 @@ pub fn spawn_maybe_sync<const IS_SYNC: bool>(
 
     // SAFETY: see `process_mut` doc; `subprocess_ptr` is the live JSC-allocated
     // Subprocess that owns `process` and outlives it.
-    unsafe { process_mut(subprocess.process.as_ptr()) }.set_exit_handler(unsafe {
-        bun_spawn::ProcessExit::new(bun_spawn::ProcessExitKind::Subprocess, subprocess_ptr)
-    });
+    unsafe { process_mut(subprocess.process.as_ptr()) }
+        .set_exit_handler(unsafe { bun_spawn::ProcessExit::from_raw(subprocess_ptr) });
 
     promise_for_stream.ensure_still_alive();
     subprocess.flags.set(

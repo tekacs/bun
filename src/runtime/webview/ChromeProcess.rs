@@ -27,7 +27,7 @@ use bun_jsc::virtual_machine::VirtualMachine;
 use bun_jsc::JSGlobalObject;
 use bun_output::{declare_scope, scoped_log};
 use bun_paths::{self, path_buffer_pool, platform, resolve_path};
-use bun_spawn::{self, EventLoopHandle, Process, ProcessExit, ProcessExitKind, Rusage, SpawnOptions, SpawnResultExt as _, Status, Stdio};
+use bun_spawn::{self, EventLoopHandle, Process, ProcessExit, Rusage, SpawnOptions, SpawnResultExt as _, Status, Stdio};
 use bun_str::strings;
 use bun_sys::{self, Fd, FdExt as _, O};
 
@@ -120,7 +120,7 @@ pub extern "C" fn Bun__Chrome__ensure(
 }
 
 bun_spawn::link_impl_ProcessExit! {
-    ChromeProcess for ChromeProcess => |this| {
+    ChromeProcess for registered ChromeProcess => |this| {
         on_process_exit(_process, status, _rusage) => {
             scoped_log!(Chrome, "chrome exited: {}", status);
             let signo: i32 = status.signal_code().map_or(0, |s| s as i32);
@@ -479,7 +479,7 @@ fn spawn(
         // owns `process` and outlives it.
         unsafe {
             (*process.as_ptr())
-                .set_exit_handler(ProcessExit::new(ProcessExitKind::ChromeProcess, self_ptr));
+                .set_exit_handler(ProcessExit::from_raw(self_ptr));
         }
         // SAFETY: process is live and exclusively owned here.
         match unsafe { (*process.as_ptr()).watch() } {

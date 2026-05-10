@@ -26,7 +26,7 @@ use bun_spawn::subprocess::{self, StdioResult};
 use bun_event_loop::{AnyEventLoop, EventLoopHandle};
 use bun_logger as logger;
 use bun_ptr::{RefPtr, ThreadSafeRefCount};
-use bun_spawn::{self as spawn, Exited, Process, ProcessExit, ProcessExitKind, Rusage, SpawnOptions, SpawnResultExt as _, Status, Stdio};
+use bun_spawn::{self as spawn, Exited, Process, ProcessExit, Rusage, SpawnOptions, SpawnResultExt as _, Status, Stdio};
 use bun_str::strings;
 use bun_sys::{self, Fd, FdExt as _};
 
@@ -986,7 +986,7 @@ impl<'a> subprocess::StaticPipeWriterProcess for SecurityScanSubprocess<'a> {
 }
 
 bun_spawn::link_impl_ProcessExit! {
-    SecurityScan for SecurityScanSubprocess => |this| {
+    SecurityScan for registered SecurityScanSubprocess<'_> => |this| {
         on_process_exit(process, status, rusage) =>
             (*this).on_process_exit(&mut *process, status, &*rusage),
     }
@@ -1333,7 +1333,7 @@ impl<'a> SecurityScanSubprocess<'a> {
         // (refcount == 1, owned by us); `parent` was just derived from
         // `&mut self` and outlives `process` (it `deref`s it in `Drop`).
         unsafe {
-            (*process).set_exit_handler(ProcessExit::new(ProcessExitKind::SecurityScan, parent));
+            (*process).set_exit_handler(ProcessExit::from_raw(parent));
             (*parent).process = Some(process);
         }
 

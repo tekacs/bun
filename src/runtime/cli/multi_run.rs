@@ -240,9 +240,8 @@ impl<'a> ProcessHandle<'a> {
         // SAFETY: `self` is the live `ProcessHandle` slot in `State.handles`;
         // it lives for the whole event loop and outlives `process`.
         process.set_exit_handler(unsafe {
-            bun_spawn::ProcessExit::new(
-                bun_spawn::ProcessExitKind::MultiRunHandle,
-                std::ptr::from_mut::<Self>(self),
+            bun_spawn::ProcessExit::from_raw::<ProcessHandle<'static>>(
+                std::ptr::from_mut::<Self>(self).cast(),
             )
         });
 
@@ -262,7 +261,7 @@ impl<'a> ProcessHandle<'a> {
 }
 
 bun_spawn::link_impl_ProcessExit! {
-    MultiRunHandle for ProcessHandle<'static> => |this| {
+    MultiRunHandle for registered ProcessHandle<'static> => |this| {
         on_process_exit(_process, status, _rusage) => {
             (*this).process.as_mut().unwrap().status = status;
             (*this).end_time = Instant::now().into();

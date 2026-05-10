@@ -15,7 +15,7 @@ use bun_io::{BufferedReader, BufferedReaderParent, EventLoopHandle};
 #[cfg(unix)]
 use bun_io::{FilePollFlag, PosixFlags};
 
-use bun_spawn::{Process, ProcessExit, ProcessExitKind, Rusage, SpawnOptions, SpawnResultExt as _, Status};
+use bun_spawn::{Process, ProcessExit, Rusage, SpawnOptions, SpawnResultExt as _, Status};
 use bun_str::ZStr;
 use bun_sys::{Fd, FdExt as _};
 // PORT NOTE: `BufferedReaderParent::loop_` is typed `*mut bun_uws::Loop` (the
@@ -743,7 +743,9 @@ impl<'a> LifecycleScriptSubprocess<'a> {
         // we hold no live `&mut Self` here, so the synchronous `on_exit`
         // dispatch below may reenter `on_process_exit` through it without
         // aliasing. It outlives `process`.
-        (*process).set_exit_handler(ProcessExit::new(ProcessExitKind::LifecycleScript, this));
+        (*process).set_exit_handler(ProcessExit::from_raw::<
+            LifecycleScriptSubprocess<'static>,
+        >(this.cast()));
 
         if let Err(err) = (*process).watch_or_reap() {
             if !(*process).has_exited() {
@@ -1187,7 +1189,7 @@ impl<'a> LifecycleScriptSubprocess<'a> {
 }
 
 bun_spawn::link_impl_ProcessExit! {
-    LifecycleScript for LifecycleScriptSubprocess<'static> => |this| {
+    LifecycleScript for registered LifecycleScriptSubprocess<'static> => |this| {
         on_process_exit(process, status, rusage) =>
             (*this).on_process_exit(process, status, &*rusage),
     }

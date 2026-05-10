@@ -33,13 +33,18 @@
 //!
 //! `this` is `*mut T`; bodies run inside a macro-provided `unsafe { }` so
 //! `(*this)` derefs are bare. The validity invariant ("`owner` is a live
-//! `*mut T` matching `kind`") is established once at `unsafe fn
-//! <Iface>::new()` — that's the only `unsafe` the caller writes.
+//! `*mut T` matching the handle's tag") is established once when constructing
+//! the handle: registered owners use `unsafe fn <Iface>::from_raw(owner)`,
+//! while raw/erased users can still use `unsafe fn <Iface>::new(kind, owner)`.
 //!
 //! Every interface method must appear exactly once in each `link_impl_*!`
 //! call (an unknown name is a compile error from the generated macro; a
 //! missing one surfaces as a link error naming
 //! `__bun_dispatch__<Iface>__<Variant>__<method>`).
+//! By default, `Variant for T` emits the old erased/raw impl shape and callers
+//! construct with explicit `new(kind, owner)`. Use `Variant for registered T`
+//! when the impl crate owns `T` and callers should construct with
+//! `from_raw(owner)`, deriving the tag from the owner type.
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
@@ -132,6 +137,7 @@ pub fn link_interface(input: TokenStream) -> TokenStream {
     let variants = &variants;
     let methods = &methods;
     let kind = format_ident!("{}Kind", name);
+    let variant_trait = format_ident!("{}Variant", name);
     let impl_macro = format_ident!("link_impl_{}", name);
 
     // ── per-method type aliases ──
@@ -234,6 +240,34 @@ pub fn link_interface(input: TokenStream) -> TokenStream {
             .map(|m| { let e = format_ident!("e_{}", m.name); quote! { $#e } }).collect();
 
         quote! {
+            ( #v for registered $T:ty => | $th:ident | {
+                #( #mn ( #( #an_mv:ident ),* ) => #e_mv:expr , )*
+            } ) => {
+                unsafe impl $crate::#variant_trait for $T {
+                    const KIND: $crate::#kind = $crate::#kind::#v;
+                }
+
+                const _: () = {
+                    #(
+                        #[unsafe(no_mangle)]
+                        #[doc(hidden)]
+                        #[allow(non_snake_case)]
+                        unsafe fn #s(
+                            __owner: *mut () #(, #an_mv: $crate::#at_alias<'_>)*
+                        ) -> $crate::#ret_alias {
+                            let $th: *mut $T = __owner.cast();
+                            let _ = $th;
+                            #[allow(
+                                unused_unsafe,
+                                clippy::macro_metavars_in_unsafe,
+                                unreachable_code,
+                            )]
+                            unsafe { #e_mv }
+                        }
+                    )*
+                };
+            };
+
             ( #v for $T:ty => | $th:ident | {
                 #( #mn ( #( #an_mv:ident ),* ) => #e_mv:expr , )*
             } ) => {
@@ -271,7 +305,34 @@ pub fn link_interface(input: TokenStream) -> TokenStream {
             pub owner: *mut (),
         }
 
+        /// Type-level binding between an erased dispatch handle and its tag.
+        ///
+        /// Implemented by `link_impl_*!` only for `Variant for registered T` arms,
+        /// so call sites can derive the tag from the concrete owner type
+        /// instead of spelling `kind + pointer` by hand.
+        ///
+        /// # Safety
+        ///
+        /// Implementors must bind `Self` to the same concrete owner type used by
+        /// that variant's generated thunk bodies. The generated `link_impl_*!`
+        /// macro is the intended implementor; handwritten impls are responsible
+        /// for preserving that type/tag coupling.
+        #[allow(clippy::missing_safety_doc)]
+        #vis unsafe trait #variant_trait: Sized {
+            const KIND: #kind;
+        }
+
         impl #name {
+            /// SAFETY: `owner` must be a live `*mut T`, and `T` must be the
+            /// registered concrete owner type for the returned handle. The
+            /// type-level variant trait supplies the tag, so callers cannot
+            /// accidentally pair one variant's tag with another variant's
+            /// pointer.
+            #[inline]
+            pub unsafe fn from_raw<T: #variant_trait>(owner: *mut T) -> Self {
+                Self { kind: T::KIND, owner: owner.cast() }
+            }
+
             /// SAFETY: `owner` must be a live `*mut T` where `T` is the
             /// concrete type the `kind` variant's `link_impl_*!` was written
             /// for, and must remain live for every dispatch through the

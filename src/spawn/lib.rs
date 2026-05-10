@@ -109,14 +109,14 @@ pub type ProcessExitHandler = Option<ProcessExit>;
 // unreachable there — but every variant needs a body or the link fails.
 #[cfg(windows)]
 link_impl_ProcessExit! {
-    SyncWindows for process::sync::SyncWindowsProcess => |this| {
+    SyncWindows for registered process::sync::SyncWindowsProcess => |this| {
         on_process_exit(process, status, rusage) =>
             process::sync::SyncWindowsProcess::on_process_exit(this, process, status, &*rusage),
     }
 }
 #[cfg(not(windows))]
 link_impl_ProcessExit! {
-    SyncWindows for process::SyncProcessPosix => |_this| {
+    SyncWindows for registered process::SyncProcessPosix => |_this| {
         on_process_exit(_process, _status, _rusage) =>
             unreachable!("SyncWindows exit handler is Windows-only"),
     }

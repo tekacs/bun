@@ -2662,7 +2662,7 @@ pub mod sync {
             p.ref_();
             // SAFETY: `this_ptr` is the live `SyncWindowsProcess` on the
             // caller's stack; `p` is owned by it and dropped before return.
-            p.set_exit_handler(ProcessExit::new(ProcessExitKind::SyncWindows, this_ptr));
+            p.set_exit_handler(ProcessExit::from_raw(this_ptr));
             p.enable_keeping_event_loop_alive();
         }
 

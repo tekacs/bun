@@ -21,7 +21,7 @@ use bun_core::{self, Error};
 use bun_jsc::virtual_machine::VirtualMachine;
 use bun_jsc::JSGlobalObject;
 use bun_output::{declare_scope, scoped_log};
-use bun_spawn::{self, EventLoopHandle, Process, ProcessExit, ProcessExitKind, Rusage, SpawnOptions, SpawnResultExt as _, Status, Stdio};
+use bun_spawn::{self, EventLoopHandle, Process, ProcessExit, Rusage, SpawnOptions, SpawnResultExt as _, Status, Stdio};
 use bun_sys::{self, Fd, FdExt as _};
 
 declare_scope!(WebViewHost, hidden);
@@ -93,7 +93,7 @@ pub extern "C" fn Bun__WebViewHost__ensure(
 }
 
 bun_spawn::link_impl_ProcessExit! {
-    HostProcess for HostProcess => |this| {
+    HostProcess for registered HostProcess => |this| {
         // Child died (EVFILT_PROC). Socket onClose may or may not have fired
         // already (clean FIN vs SIGKILL/SIGSEGV). Tell C++ to reject any
         // pending promises and mark the host dead.
@@ -185,7 +185,7 @@ fn spawn(
         // owns `process` and outlives it.
         unsafe {
             (*process.as_ptr())
-                .set_exit_handler(ProcessExit::new(ProcessExitKind::HostProcess, self_ptr));
+                .set_exit_handler(ProcessExit::from_raw(self_ptr));
         }
         // SAFETY: process is live and exclusively owned here.
         match unsafe { (*process.as_ptr()).watch() } {

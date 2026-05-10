@@ -288,12 +288,7 @@ impl Worker {
         unsafe { (*coord_ptr.cast_mut()).live_workers += 1 };
         // SAFETY: `this` is the live `Box<Worker>` slot in
         // `Coordinator.workers`; it outlives `process`.
-        process.set_exit_handler(unsafe {
-            bun_spawn::ProcessExit::new(
-                bun_spawn::ProcessExitKind::TestParallelWorker,
-                &raw mut **this,
-            )
-        });
+        process.set_exit_handler(unsafe { bun_spawn::ProcessExit::from_raw(&raw mut **this) });
         match process.watch_or_reap() {
             Ok(_) => {}
             Err(e) => {
@@ -385,7 +380,7 @@ impl Worker {
 }
 
 bun_spawn::link_impl_ProcessExit! {
-    TestParallelWorker for Worker => |this| {
+    TestParallelWorker for registered Worker => |this| {
         on_process_exit(process, status, rusage) =>
             (*this).on_process_exit(&*process, status, &*rusage),
     }

@@ -1893,7 +1893,6 @@ pub fn cron_parse(global: &JSGlobalObject, frame: &CallFrame) -> JsResult<JSValu
 /// Trait abstracting over CronRegisterJob/CronRemoveJob for `spawn_cmd_generic`.
 // TODO(port): merge with CronJobBase in Phase B.
 trait SpawnCmdTarget: CronJobBase + BufferedReaderParent {
-    const EXIT_KIND: bun_spawn::ProcessExitKind;
     fn set_err(&mut self, args: core::fmt::Arguments<'_>);
     /// Consumes and frees `this`.
     unsafe fn finish(this: *mut Self);
@@ -1904,21 +1903,20 @@ trait SpawnCmdTarget: CronJobBase + BufferedReaderParent {
 }
 
 bun_spawn::link_impl_ProcessExit! {
-    CronRegister for CronRegisterJob => |this| {
+    CronRegister for registered CronRegisterJob => |this| {
         // Forward `this` raw — `on_process_exit` → `maybe_finished` may free it.
         on_process_exit(process, status, rusage) =>
             <CronRegisterJob as CronJobBase>::on_process_exit(this, &*process, status, &*rusage),
     }
 }
 bun_spawn::link_impl_ProcessExit! {
-    CronRemove for CronRemoveJob => |this| {
+    CronRemove for registered CronRemoveJob => |this| {
         on_process_exit(process, status, rusage) =>
             <CronRemoveJob as CronJobBase>::on_process_exit(this, &*process, status, &*rusage),
     }
 }
 
 impl SpawnCmdTarget for CronRegisterJob {
-    const EXIT_KIND: bun_spawn::ProcessExitKind = bun_spawn::ProcessExitKind::CronRegister;
     fn set_err(&mut self, args: core::fmt::Arguments<'_>) { CronRegisterJob::set_err(self, args) }
     unsafe fn finish(this: *mut Self) { unsafe { CronRegisterJob::finish(this) } }
     fn process_slot(&mut self) -> &mut Option<*mut Process> { &mut self.process }
@@ -1927,7 +1925,6 @@ impl SpawnCmdTarget for CronRegisterJob {
     fn remaining_fds(&mut self) -> &mut i8 { &mut self.remaining_fds }
 }
 impl SpawnCmdTarget for CronRemoveJob {
-    const EXIT_KIND: bun_spawn::ProcessExitKind = bun_spawn::ProcessExitKind::CronRemove;
     fn set_err(&mut self, args: core::fmt::Arguments<'_>) { CronRemoveJob::set_err(self, args) }
     unsafe fn finish(this: *mut Self) { unsafe { CronRemoveJob::finish(this) } }
     fn process_slot(&mut self) -> &mut Option<*mut Process> { &mut self.process }
@@ -1942,7 +1939,7 @@ impl SpawnCmdTarget for CronRemoveJob {
 /// error or `watch_or_reap` → exit handler → `maybe_finished` → `finish`).
 /// Raw-ptr receiver: see [`CronJobBase`] PORT NOTE. Callers must not touch
 /// `this` after this returns.
-unsafe fn spawn_cmd_generic<T: SpawnCmdTarget>(
+unsafe fn spawn_cmd_generic<T: SpawnCmdTarget + bun_spawn::ProcessExitVariant>(
     this: *mut T,
     argv: &mut [*const c_char],
     stdin_opt: spawn::Stdio,
@@ -2121,7 +2118,7 @@ unsafe fn spawn_cmd_generic<T: SpawnCmdTarget>(
     // SAFETY: `process` was just allocated by `to_process`; we hold the only
     // ref. `this` is the owning `Box<T>` (only freed in `T::finish`, gated on
     // `has_called_process_exit`), so it outlives `process`.
-    unsafe { (*process).set_exit_handler(bun_spawn::ProcessExit::new(T::EXIT_KIND, this)) };
+    unsafe { (*process).set_exit_handler(bun_spawn::ProcessExit::from_raw(this)) };
     // `s` not used past this point — `watch_or_reap` may synchronously invoke
     // the exit handler, which can free `this`.
     // SAFETY: `process` is live; `watch_or_reap` may synchronously invoke the

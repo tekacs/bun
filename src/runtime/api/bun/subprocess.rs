@@ -371,7 +371,7 @@ pub extern "C" fn on_abort_signal(ctx: *mut c_void, reason: JSValue) {
 }
 
 bun_spawn::link_impl_ProcessExit! {
-    Subprocess for Subprocess => |this| {
+    Subprocess for registered Subprocess<'_> => |this| {
         // `process` forwarded raw (not reborrowed) so `on_process_exit` can
         // hand it to `VirtualMachine::on_subprocess_exit` without a const→mut
         // provenance cast.

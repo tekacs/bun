@@ -282,7 +282,7 @@ impl JscSubprocess::static_pipe_writer::StaticPipeWriterProcess for ShellSubproc
 pub type WatchFd = Fd;
 
 bun_spawn::link_impl_ProcessExit! {
-    Shell for ShellSubprocess => |this| {
+    Shell for registered ShellSubprocess => |this| {
         on_process_exit(process, status, rusage) =>
             (*this).on_process_exit(&*process, status, &*rusage),
     }
@@ -776,9 +776,9 @@ impl ShellSubprocess {
         let subproc = unsafe { &mut *subprocess };
         // SAFETY: `subprocess` is the just-allocated `ShellSubprocess`; the
         // owning `Cmd` outlives the `Process` exit callback.
-        subproc.proc().set_exit_handler(unsafe {
-            bun_spawn::ProcessExit::new(bun_spawn::ProcessExitKind::Shell, subprocess)
-        });
+        subproc
+            .proc()
+            .set_exit_handler(unsafe { bun_spawn::ProcessExit::from_raw(subprocess) });
         let _ = scopeguard::ScopeGuard::into_inner(stdio_guard);
 
         // Spec: `subprocess.stdin.pipe.signal = Signal.init(&subprocess.stdin)`.
